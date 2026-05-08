@@ -580,14 +580,14 @@ function TradeInspector({ trade, onUpdate }) {
         </div>
         <ResultBadge result={trade.result} />
       </div>
-      <div className="mb-4 grid grid-cols-3 gap-2">
+      <div className="mb-4 grid grid-cols-2 gap-2">
         <Metric label="入场" value={trade.entry} />
         <Metric label="止损" value={trade.stop} />
         <Metric label="止盈" value={trade.target} />
         <Metric label="利润" value={formatProfit(trade.profit)} />
       </div>
       <label className="mb-2 block text-xs text-slate-400">完结后更新结果</label>
-      <div className="mb-4 grid grid-cols-2 gap-2">
+      <div className="mb-4 grid grid-cols-3 gap-2">
         {['pending', 'win', 'loss'].map((result) => (
           <button
             key={result}
@@ -1006,25 +1006,40 @@ function TradeModal({ form, setForm, onClose, onSave, onSaveDraft }) {
         </div>
         <div className="grid max-h-[calc(92vh-136px)] gap-5 overflow-y-auto p-5 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="grid gap-4">
-            <div className="grid gap-3 md:grid-cols-3">
-              <Input label="日期" type="datetime-local" value={form.date ?? ''} onChange={(value) => update('date', value)} />
-              <SelectField label="品种" value={form.symbol} onChange={(value) => update('symbol', value)} options={['EUR/USD', 'GBP/USD', 'XAU/USD', 'NAS100', 'US30', 'BTC/USD']} />
-              <SelectField label="时间框架" value={form.timeframe} onChange={(value) => update('timeframe', value)} options={['1M', '5M', '15M', '1H', '4H', '1D']} />
-              <Segmented label="方向" value={form.direction} onChange={(value) => update('direction', value)} options={['多', '空']} />
-              <SelectField label="模型" value={form.model} onChange={(value) => update('model', value)} options={models.map((model) => model.name)} />
+            <div className="rounded-md border border-slate-700/70 bg-ink-950/35 p-4">
+              <div className="mb-3 text-sm font-semibold text-slate-200">基础信息</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Input label="日期" type="datetime-local" value={form.date ?? ''} onChange={(value) => update('date', value)} />
+                <SelectField label="品种" value={form.symbol} onChange={(value) => update('symbol', value)} options={['EUR/USD', 'GBP/USD', 'XAU/USD', 'NAS100', 'US30', 'BTC/USD']} />
+                <SelectField label="时间框架" value={form.timeframe} onChange={(value) => update('timeframe', value)} options={['1M', '5M', '15M', '1H', '4H', '1D']} />
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                <Segmented label="方向" value={form.direction} onChange={(value) => update('direction', value)} options={['多', '空']} />
+                <div className="md:col-span-2">
+                  <SelectField label="模型" value={form.model} onChange={(value) => update('model', value)} options={models.map((model) => model.name)} />
+                </div>
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
-              <Input label="入场价" required value={form.entry} onChange={(value) => update('entry', value)} />
-              <Input label="止损" required value={form.stop} onChange={(value) => update('stop', value)} />
-              <Input label="止盈" required value={form.target} onChange={(value) => update('target', value)} />
-              <Input label="风险回报比 (R)" value={form.rMultiple} onChange={(value) => update('rMultiple', value)} />
-              <Input label="仓位 (%)" value={form.position} onChange={(value) => update('position', value)} />
-              <Input label="风险金额 (USD)" value={form.risk} onChange={(value) => update('risk', value)} />
-              <Input label="利润 (USD)" value={form.profit} onChange={(value) => update('profit', value)} placeholder="完成后可填写，亏损填负数" />
+            <div className="rounded-md border border-slate-700/70 bg-ink-950/35 p-4">
+              <div className="mb-3 text-sm font-semibold text-slate-200">价格与风控</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Input label="入场价" required value={form.entry} onChange={(value) => update('entry', value)} />
+                <Input label="止损" required value={form.stop} onChange={(value) => update('stop', value)} />
+                <Input label="止盈" required value={form.target} onChange={(value) => update('target', value)} />
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-4">
+                <Input label="风险回报比 (R)" value={form.rMultiple} onChange={(value) => update('rMultiple', value)} />
+                <Input label="仓位 (%)" value={form.position} onChange={(value) => update('position', value)} />
+                <Input label="风险金额 (USD)" value={form.risk} onChange={(value) => update('risk', value)} />
+                <Input label="利润 (USD)" value={form.profit} onChange={(value) => update('profit', value)} placeholder="亏损填负数" />
+              </div>
             </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <SelectField label="当前结果" value={form.result} onChange={(value) => update('result', value)} options={['pending', 'win', 'loss']} labels={resultLabels} />
-              <Input label="标签" value={form.tags} onChange={(value) => update('tags', value)} placeholder="扫流 FVG 伦敦盘" />
+            <div className="rounded-md border border-slate-700/70 bg-ink-950/35 p-4">
+              <div className="mb-3 text-sm font-semibold text-slate-200">结果与标签</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <SelectField label="当前结果" value={form.result} onChange={(value) => update('result', value)} options={['pending', 'win', 'loss']} labels={resultLabels} />
+                <Input label="标签" value={form.tags} onChange={(value) => update('tags', value)} placeholder="扫流 FVG 伦敦盘" />
+              </div>
             </div>
             <Textarea label="交易计划" value={form.plan} onChange={(value) => update('plan', value)} placeholder="入场条件、失效条件、管理规则..." />
             <Textarea label="执行备注" value={form.note} onChange={(value) => update('note', value)} placeholder="当时看到的结构、情绪、是否等待确认..." />
