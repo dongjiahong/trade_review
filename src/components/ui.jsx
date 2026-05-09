@@ -47,7 +47,7 @@ export function Input({ label, value, onChange, type = 'text', placeholder = '',
   );
 }
 
-export function Textarea({ label, value, onChange, placeholder }) {
+export function Textarea({ label, value, onChange, placeholder, rows }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-medium text-slate-200">{label}</span>
@@ -55,7 +55,8 @@ export function Textarea({ label, value, onChange, placeholder }) {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="min-h-24 w-full resize-none rounded-md border border-slate-700 bg-ink-950/70 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-cyan-400"
+        rows={rows}
+        className={`${rows ? '' : 'min-h-24'} w-full resize-y rounded-md border border-slate-700 bg-ink-950/70 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-cyan-400`}
       />
     </label>
   );
@@ -96,11 +97,11 @@ export function Segmented({ label, value, onChange, options }) {
   );
 }
 
-export function TextBlock({ title, text, empty }) {
+export function TextBlock({ title, text, empty, contentClassName = '' }) {
   return (
     <div className="mt-3 rounded-md border border-slate-700/70 bg-ink-950/45 p-3">
       <div className="mb-1 text-xs text-slate-500">{title}</div>
-      <p className="text-sm leading-6 text-slate-300">{text || empty}</p>
+      <p className={`whitespace-pre-wrap text-sm leading-6 text-slate-300 ${contentClassName}`}>{text || empty}</p>
     </div>
   );
 }

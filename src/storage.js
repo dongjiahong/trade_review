@@ -78,11 +78,18 @@ export async function saveTradesToDb(trades) {
     const transaction = db.transaction([tradeStoreName, assetStoreName], 'readwrite');
     const tradeStore = transaction.objectStore(tradeStoreName);
     const assetStore = transaction.objectStore(assetStoreName);
+    const existingAssets = new Map((await requestToPromise(assetStore.getAll())).map((asset) => [asset.id, asset]));
     tradeStore.clear();
     assetStore.clear();
     trades.map(normalizeTrade).forEach((trade) => {
       getTradeAssetRefs(trade).forEach((assetRef) => {
-        if (!assetRef.id || !assetRef.blob) return;
+        if (!assetRef.id) return;
+        const existingAsset = existingAssets.get(assetRef.id);
+        if (!assetRef.blob && existingAsset) {
+          assetStore.put(existingAsset);
+          return;
+        }
+        if (!assetRef.blob) return;
         assetStore.put({
           id: assetRef.id,
           blob: assetRef.blob,
@@ -143,11 +150,10 @@ export async function loadAiConfigFromDb() {
 export async function clearJournalDb() {
   const db = await openJournalDb();
   try {
-    const transaction = db.transaction([tradeStoreName, assetStoreName, modelStoreName, settingsStoreName], 'readwrite');
-    transaction.objectStore(tradeStoreName).clear();
-    transaction.objectStore(assetStoreName).clear();
-    transaction.objectStore(modelStoreName).clear();
-    transaction.objectStore(settingsStoreName).clear();
+    const storeNames = [tradeStoreName, assetStoreName, modelStoreName, settingsStoreName].filter((storeName) => db.objectStoreNames.contains(storeName));
+    if (!storeNames.length) return;
+    const transaction = db.transaction(storeNames, 'readwrite');
+    storeNames.forEach((storeName) => transaction.objectStore(storeName).clear());
     await transactionDone(transaction);
   } finally {
     closeDb(db);
@@ -402,4 +408,3 @@ function crc32(bytes) {
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
-

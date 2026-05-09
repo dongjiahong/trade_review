@@ -1,6 +1,6 @@
-import { BookOpen, CircleX, Plus, Star, Target, Zap } from 'lucide-react';
+import { Plus, Star } from 'lucide-react';
 import React from 'react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import bosPullbackImage from '../../images/BOS Pullback.jpg';
 import breakerBlockImage from '../../images/Breaker Block.jpg';
 import equalHighsLowsImage from '../../images/Equal Highs : Equal Lows Liquidity Run.jpg';
@@ -8,6 +8,8 @@ import fvgContinuationImage from '../../images/FVG Continuation.jpg';
 import inducementSweepPoiImage from '../../images/Inducement + Sweep + POI.jpg';
 import liquiditySweepChochImage from '../../images/Liquidity Sweep + ChoCH.jpg';
 import obReversalImage from '../../images/OB Reversal.jpg';
+import { seedModels } from '../data.js';
+import ModelEditor from './ModelEditor.jsx';
 
 const referenceImages = {
   'liquidity-sweep-choch': liquiditySweepChochImage,
@@ -19,8 +21,14 @@ const referenceImages = {
   'equal-highs-lows-run': equalHighsLowsImage,
 };
 
-export default function ModelsView({ models, onCreateModel, onToggleFavorite, onUpdateModel }) {
+export default function ModelsView({ models, lastCreatedModelId, onCreateModel, onToggleFavorite, onUpdateModel, onDeleteModel }) {
   const [openModelIds, setOpenModelIds] = useState(new Set());
+  const seedModelIds = useMemo(() => new Set(seedModels.map((model) => model.id)), []);
+
+  useEffect(() => {
+    if (!lastCreatedModelId) return;
+    setOpenModelIds((current) => new Set(current).add(lastCreatedModelId));
+  }, [lastCreatedModelId]);
 
   function toggleModelOpen(id) {
     setOpenModelIds((current) => {
@@ -81,31 +89,13 @@ export default function ModelsView({ models, onCreateModel, onToggleFavorite, on
                 </button>
               </div>
               {isOpen && (
-                <div className="border-t border-slate-700/70 p-4 pt-3">
-                  <input
-                    value={model.name}
-                    onChange={(event) => onUpdateModel(model.id, { name: event.target.value })}
-                    className="mb-3 w-full min-w-0 rounded-md border border-slate-700 bg-ink-900/80 px-3 py-2 text-lg font-semibold outline-none focus:border-cyan-400"
-                  />
-                  <div className="mb-3 grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-                    {model.logic && (
-                      <div className="rounded-md border border-slate-700/70 bg-ink-900/70 p-3">
-                        <div className="mb-1 flex items-center gap-2 text-xs font-semibold text-cyan-200">
-                          <BookOpen size={14} />
-                          模型逻辑
-                        </div>
-                        <p className="text-sm leading-6 text-slate-300">{model.logic}</p>
-                      </div>
-                    )}
-                    <ReferenceChart model={model} />
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <ModelList icon={Target} title="条件" items={model.points} tone="cyan" />
-                    <ModelList icon={Zap} title="触发" items={model.triggers} tone="amber" />
-                    <ModelList icon={CircleX} title="失效" items={splitText(model.fail)} tone="rose" />
-                    <ModelList icon={Star} title="要点" items={model.keyPoints} tone="blue" />
-                  </div>
-                </div>
+                <ModelEditor
+                  model={model}
+                  canDelete={!seedModelIds.has(model.id)}
+                  onUpdate={(patch) => onUpdateModel(model.id, patch)}
+                  onDelete={() => onDeleteModel(model.id)}
+                  referenceChart={<ReferenceChart model={model} />}
+                />
               )}
             </article>
           );
@@ -137,37 +127,4 @@ function ReferenceChart({ model }) {
       <div className="border-t border-slate-200 px-3 py-2 text-xs font-medium text-slate-600">{model.name} K 线示意图</div>
     </div>
   );
-}
-
-function ModelList({ icon: Icon, title, items, tone }) {
-  const tones = {
-    cyan: 'text-cyan-200 border-cyan-400/20 bg-cyan-500/8',
-    amber: 'text-amber-100 border-amber-400/20 bg-amber-500/8',
-    rose: 'text-rose-100 border-rose-400/20 bg-rose-500/8',
-    blue: 'text-sky-100 border-sky-400/20 bg-sky-500/8',
-  };
-  const list = items?.length ? items : ['待补充'];
-  return (
-    <div className={`rounded-md border p-3 ${tones[tone]}`}>
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-        <Icon size={16} />
-        {title}
-      </div>
-      <ul className="space-y-1.5 text-sm leading-5 text-slate-300">
-        {list.map((item) => (
-          <li key={item} className="flex gap-2">
-            <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-80" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function splitText(value) {
-  return String(value || '')
-    .split(/[；;。]\s*/)
-    .map((item) => item.trim())
-    .filter(Boolean);
 }

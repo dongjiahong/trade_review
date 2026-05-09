@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Header from './components/Header.jsx';
 import ModelsView from './components/ModelsView.jsx';
 import OrdersView from './components/OrdersView.jsx';
@@ -11,6 +11,7 @@ import { defaultAiConfig, emptyForm, mergeSeedModelDetails, seedModels } from '.
 import { clearJournalDb, loadAiConfigFromDb, loadModelsFromDb, loadTradesFromDb, saveAiConfigToDb, saveModelsToDb, saveTradesToDb } from './storage.js';
 import { createId, normalizeModel, normalizeTrade } from './tradeAssets.js';
 import { calculateRiskReward } from './tradeMath.js';
+import { buildTradePlan } from './tradePlan.js';
 import { calculateStats, toInputDateTime } from './tradeUtils.js';
 
 function App() {
@@ -19,6 +20,8 @@ function App() {
   const [aiConfig, setAiConfig] = useState(defaultAiConfig);
   const [isHydrated, setIsHydrated] = useState(false);
   const [storageStatus, setStorageStatus] = useState('正在加载 IndexedDB...');
+  const persistenceReadyRef = useRef({ trades: false, models: false, aiConfig: false });
+  const initialPersistSkippedRef = useRef({ trades: false, models: false, aiConfig: false });
   const [activeView, setActiveView] = useState('orders');
   const [query, setQuery] = useState('');
   const [modelFilter, setModelFilter] = useState('全部模型');
@@ -26,29 +29,34 @@ function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [selectedTradeId, setSelectedTradeId] = useState('');
+  const [lastCreatedModelId, setLastCreatedModelId] = useState('');
 
   useEffect(() => {
     let ignore = false;
     async function hydrate() {
-      try {
-        const [storedTrades, storedModels, storedAiConfig] = await Promise.all([loadTradesFromDb(), loadModelsFromDb(), loadAiConfigFromDb()]);
-        if (ignore) return;
-        const nextTrades = storedTrades;
-        const nextModels = mergeSeedModelDetails(storedModels);
-        setTrades(nextTrades);
-        setModels(nextModels);
-        setSelectedTradeId(nextTrades[0]?.id ?? '');
-        setAiConfig(storedAiConfig);
-        setStorageStatus('IndexedDB 已连接');
-      } catch {
-        if (ignore) return;
-        setTrades([]);
-        setModels(seedModels);
-        setSelectedTradeId('');
-        setStorageStatus('IndexedDB 不可用，当前使用内存数据');
-      } finally {
-        if (!ignore) setIsHydrated(true);
-      }
+      const [tradesResult, modelsResult, aiConfigResult] = await Promise.allSettled([loadTradesFromDb(), loadModelsFromDb(), loadAiConfigFromDb()]);
+      if (ignore) return;
+
+      const ready = {
+        trades: tradesResult.status === 'fulfilled',
+        models: modelsResult.status === 'fulfilled',
+        aiConfig: aiConfigResult.status === 'fulfilled',
+      };
+      persistenceReadyRef.current = ready;
+
+      const nextTrades = ready.trades ? tradesResult.value : [];
+      setTrades(nextTrades);
+      setSelectedTradeId(nextTrades[0]?.id ?? '');
+      setModels(ready.models ? mergeSeedModelDetails(modelsResult.value) : seedModels);
+      setAiConfig(ready.aiConfig ? aiConfigResult.value : defaultAiConfig);
+
+      const failedStores = [
+        ready.trades ? '' : '订单',
+        ready.models ? '' : '模型',
+        ready.aiConfig ? '' : 'AI 配置',
+      ].filter(Boolean);
+      setStorageStatus(failedStores.length ? `IndexedDB 部分加载失败：${failedStores.join('、')}暂不自动覆盖` : 'IndexedDB 已连接');
+      setIsHydrated(true);
     }
     hydrate();
     return () => {
@@ -57,19 +65,31 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !persistenceReadyRef.current.trades) return;
+    if (!initialPersistSkippedRef.current.trades) {
+      initialPersistSkippedRef.current.trades = true;
+      return;
+    }
     saveTradesToDb(trades)
       .then(() => setStorageStatus('IndexedDB 已保存'))
       .catch(() => setStorageStatus('IndexedDB 保存失败'));
   }, [isHydrated, trades]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !persistenceReadyRef.current.aiConfig) return;
+    if (!initialPersistSkippedRef.current.aiConfig) {
+      initialPersistSkippedRef.current.aiConfig = true;
+      return;
+    }
     saveAiConfigToDb(aiConfig).catch(() => setStorageStatus('AI 配置保存失败'));
   }, [aiConfig, isHydrated]);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !persistenceReadyRef.current.models) return;
+    if (!initialPersistSkippedRef.current.models) {
+      initialPersistSkippedRef.current.models = true;
+      return;
+    }
     saveModelsToDb(models).catch(() => setStorageStatus('模型保存失败'));
   }, [isHydrated, models]);
 
@@ -118,11 +138,13 @@ function App() {
     const id = `T-${Date.now()}`;
     const rMultiple = calculateRiskReward(source);
     const profit = source.profit;
+    const plannedSource = { ...source, rMultiple };
     const trade = {
-      ...source,
+      ...plannedSource,
       id,
       date: source.date || toInputDateTime(new Date()),
       rMultiple,
+      plan: buildTradePlan(plannedSource, models),
       profit: profit === '' ? '' : String(Number.parseFloat(profit) || 0),
       result: source.result,
       closedAt: source.closePrice ? source.closedAt || toInputDateTime(new Date()) : '',
@@ -137,6 +159,16 @@ function App() {
 
   function updateTrade(id, patch) {
     setTrades((current) => current.map((trade) => (trade.id === id ? normalizeTrade({ ...trade, ...patch }) : trade)));
+  }
+
+  function deleteTrade(id) {
+    setTrades((current) => {
+      const nextTrades = current.filter((trade) => trade.id !== id);
+      if (selectedTradeId === id) {
+        setSelectedTradeId(nextTrades[0]?.id ?? '');
+      }
+      return nextTrades;
+    });
   }
 
   function closeTrade(id, closePrice, profit) {
@@ -167,6 +199,7 @@ function App() {
       fail: '补充模型失效条件。',
     });
     setModels((current) => [...current, model]);
+    setLastCreatedModelId(model.id);
   }
 
   function toggleModelFavorite(id) {
@@ -174,16 +207,41 @@ function App() {
   }
 
   function updateModel(id, patch) {
+    const currentModel = models.find((model) => model.id === id);
     setModels((current) => current.map((model) => (model.id === id ? normalizeModel({ ...model, ...patch }) : model)));
+    if (patch.name && currentModel?.name && patch.name !== currentModel.name) {
+      setTrades((currentTrades) => currentTrades.map((trade) => (trade.model === currentModel.name ? { ...trade, model: patch.name } : trade)));
+      if (modelFilter === currentModel.name) {
+        setModelFilter(patch.name);
+      }
+    }
+  }
+
+  function deleteModel(id) {
+    const seedModelIds = new Set(seedModels.map((model) => model.id));
+    if (seedModelIds.has(id)) return;
+    setModels((current) => {
+      const model = current.find((item) => item.id === id);
+      if (modelFilter === model?.name) {
+        setModelFilter('全部模型');
+      }
+      return current.filter((item) => item.id !== id);
+    });
   }
 
   async function clearAllData() {
-    await clearJournalDb();
-    setTrades([]);
-    setModels(seedModels);
-    setAiConfig(defaultAiConfig);
-    setSelectedTradeId('');
-    setStorageStatus('已清空，等待新数据');
+    try {
+      await clearJournalDb();
+      persistenceReadyRef.current = { trades: true, models: true, aiConfig: true };
+      initialPersistSkippedRef.current = { trades: true, models: true, aiConfig: true };
+      setTrades([]);
+      setModels(seedModels);
+      setAiConfig(defaultAiConfig);
+      setSelectedTradeId('');
+      setStorageStatus('已清空，等待新数据');
+    } catch {
+      setStorageStatus('清除失败：IndexedDB 结构异常');
+    }
   }
 
   return (
@@ -191,7 +249,7 @@ function App() {
       <div className="mx-auto flex min-h-screen w-full max-w-[1800px] min-w-0 flex-col gap-4 px-3 py-4 lg:h-full lg:min-h-0 lg:flex-row lg:overflow-hidden lg:px-5">
         <Sidebar activeView={activeView} onViewChange={setActiveView} stats={stats} />
         <main className="flex min-w-0 flex-1 flex-col gap-4 lg:min-h-0">
-          <Header onNewTrade={openNewTrade} />
+          <Header trades={trades} onNewTrade={openNewTrade} />
           {activeView === 'orders' && (
             <OrdersView
               trades={filteredTrades}
@@ -206,11 +264,21 @@ function App() {
               onSelect={setSelectedTradeId}
               selectedTradeId={selectedTrade?.id}
               onUpdate={updateTrade}
+              onDelete={deleteTrade}
               onCloseTrade={closeTrade}
               onNewTrade={openNewTrade}
             />
           )}
-          {activeView === 'models' && <ModelsView models={models} onCreateModel={createModel} onToggleFavorite={toggleModelFavorite} onUpdateModel={updateModel} />}
+          {activeView === 'models' && (
+            <ModelsView
+              models={models}
+              lastCreatedModelId={lastCreatedModelId}
+              onCreateModel={createModel}
+              onToggleFavorite={toggleModelFavorite}
+              onUpdateModel={updateModel}
+              onDeleteModel={deleteModel}
+            />
+          )}
           {activeView === 'review' && (
             <ReviewView
               trades={trades}

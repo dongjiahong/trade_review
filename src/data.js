@@ -1,5 +1,5 @@
 export const dbName = 'smc-journal-db';
-export const dbVersion = 3;
+export const dbVersion = 4;
 export const tradeStoreName = 'trades';
 export const assetStoreName = 'assets';
 export const modelStoreName = 'models';
@@ -255,6 +255,9 @@ export const emptyForm = {
   result: 'pending',
   tags: '',
   plan: '',
+  marketContext: '',
+  entryConditions: '',
+  exitRules: '',
   note: '',
   review: '',
   checklist: ['趋势方向确认', '风险收益比合格'],

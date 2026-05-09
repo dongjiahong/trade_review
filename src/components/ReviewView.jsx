@@ -135,8 +135,8 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
               <TradeImagePreview title="下单 K 线图" image={selectedTrade.entryImage} onPreview={setPreviewImage} />
               <TradeImagePreview title="平仓 K 线图" image={selectedTrade.closeImage} onPreview={setPreviewImage} />
             </div>
-            <div className="grid gap-3 lg:grid-cols-2">
-              <TextBlock title="交易计划" text={selectedTrade.plan} empty="暂无计划" />
+            <div className="grid gap-3">
+              <TextBlock title="交易计划" text={selectedTrade.plan} empty="暂无计划" contentClassName="max-h-48 overflow-y-auto pr-2" />
               <TextBlock title="执行备注" text={selectedTrade.note} empty="暂无备注" />
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3">

@@ -1,4 +1,4 @@
-import { ClipboardList, Filter, MoreVertical, Search } from 'lucide-react';
+import { ClipboardList, Filter, MoreVertical, Search, Trash2 } from 'lucide-react';
 import React from 'react';
 import { useEffect, useState } from 'react';
 import { imagePatchFromAsset } from '../tradeAssets.js';
@@ -20,10 +20,28 @@ export default function OrdersView(props) {
     onSelect,
     selectedTradeId,
     onUpdate,
+    onDelete,
     onCloseTrade,
     onNewTrade,
   } = props;
   const selectedTrade = allTrades.find((trade) => trade.id === selectedTradeId) ?? allTrades[0];
+  const [openMenuTradeId, setOpenMenuTradeId] = useState('');
+
+  useEffect(() => {
+    if (!openMenuTradeId) return undefined;
+    function closeMenu() {
+      setOpenMenuTradeId('');
+    }
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') closeMenu();
+    }
+    document.addEventListener('click', closeMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('click', closeMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [openMenuTradeId]);
 
   return (
     <section className={`grid w-full min-w-0 gap-4 lg:min-h-0 lg:flex-1 ${selectedTrade ? '2xl:grid-cols-[minmax(0,1fr)_360px]' : ''}`}>
@@ -92,8 +110,47 @@ export default function OrdersView(props) {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-500">
-                    <MoreVertical size={16} />
+                  <td className="relative px-4 py-3 text-slate-500">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenMenuTradeId((current) => (current === trade.id ? '' : trade.id));
+                      }}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                      aria-label="订单操作"
+                      aria-expanded={openMenuTradeId === trade.id}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {openMenuTradeId === trade.id && (
+                      <div
+                        onClick={(event) => event.stopPropagation()}
+                        className="absolute right-3 top-10 z-30 w-36 rounded-md border border-slate-700 bg-ink-950 py-1 shadow-glow"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelect(trade.id);
+                            setOpenMenuTradeId('');
+                          }}
+                          className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
+                        >
+                          查看详情
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onDelete(trade.id);
+                            setOpenMenuTradeId('');
+                          }}
+                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/12"
+                        >
+                          <Trash2 size={14} />
+                          删除订单
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

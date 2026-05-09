@@ -3,6 +3,7 @@ import React from 'react';
 import { tagPresets } from '../data.js';
 import { imagePatchFromAsset } from '../tradeAssets.js';
 import { calculateRiskReward } from '../tradeMath.js';
+import { buildTradePlan, getPlanMissingItems } from '../tradePlan.js';
 import { resultLabels } from '../tradeUtils.js';
 import PasteImagePanel from './PasteImagePanel.jsx';
 import { Input, Metric, SelectField, Segmented, Textarea } from './ui.jsx';
@@ -10,6 +11,8 @@ import { Input, Metric, SelectField, Segmented, Textarea } from './ui.jsx';
 export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft, models }) {
   const canSave = form.symbol && form.entry && form.stop && form.target;
   const computedR = calculateRiskReward(form);
+  const generatedPlan = buildTradePlan(form, models);
+  const missingPlanItems = getPlanMissingItems(form);
 
   function update(key, value) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -96,7 +99,12 @@ export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft
                 </div>
               </div>
             </div>
-            <Textarea label="交易计划" value={form.plan} onChange={(value) => update('plan', value)} placeholder="入场条件、失效条件、管理规则..." />
+            <TradePlanBuilder
+              form={form}
+              update={update}
+              generatedPlan={generatedPlan}
+              missingItems={missingPlanItems}
+            />
             <Textarea label="执行备注" value={form.note} onChange={(value) => update('note', value)} placeholder="当时看到的结构、情绪、是否等待确认..." />
             <Textarea label="复盘结论" value={form.review} onChange={(value) => update('review', value)} placeholder="可留空，订单完成后再补。" />
             <Checklist value={form.checklist} onChange={(value) => update('checklist', value)} />
@@ -139,6 +147,58 @@ export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft
             保存交易
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TradePlanBuilder({ form, update, generatedPlan, missingItems }) {
+  return (
+    <div className="rounded-md border border-slate-700/70 bg-ink-950/35 p-4">
+      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-200">结构化交易计划</div>
+          <p className="mt-1 text-xs text-slate-400">品种、周期、模型、价格和风控会自动从上面的表单生成，只补充主观判断部分。</p>
+        </div>
+        <span className={`rounded border px-2.5 py-1 text-xs ${missingItems.length ? 'border-amber-400/25 bg-amber-500/10 text-amber-100' : 'border-emerald-400/25 bg-emerald-500/10 text-emerald-100'}`}>
+          {missingItems.length ? `待补齐 ${missingItems.length} 项` : '计划完整'}
+        </span>
+      </div>
+      {missingItems.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {missingItems.map((item) => (
+            <span key={item} className="rounded bg-amber-500/10 px-2 py-1 text-xs text-amber-100">
+              {item}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="grid gap-3">
+        <Textarea
+          label="市场环境"
+          value={form.marketContext}
+          onChange={(value) => update('marketContext', value)}
+          placeholder="例如：高周期偏多，价格位于 1H Discount，前低下方有流动性，目标是等待扫低后反转确认。"
+          rows={2}
+        />
+        <Textarea
+          label="入场条件补充"
+          value={form.entryConditions}
+          onChange={(value) => update('entryConditions', value)}
+          placeholder="例如：扫前低后收回，5M 出现 ChoCH，回踩 FVG 50% 附近入场。"
+          rows={2}
+        />
+        <Textarea
+          label="出场规则补充"
+          value={form.exitRules}
+          onChange={(value) => update('exitRules', value)}
+          placeholder="例如：到 1R 后保护本金；到达前高先减仓；重新跌破确认结构直接离场。"
+          rows={2}
+        />
+      </div>
+      <div className="mt-3 rounded-md border border-slate-700/70 bg-ink-900/70 p-3">
+        <div className="mb-2 text-xs font-semibold text-cyan-200">自动生成预览</div>
+        <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-xs leading-5 text-slate-300">{generatedPlan}</pre>
       </div>
     </div>
   );
