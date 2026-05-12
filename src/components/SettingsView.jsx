@@ -1,24 +1,38 @@
-import { AlertTriangle, Download, Upload } from 'lucide-react';
+import { AlertTriangle, Calendar, Download, Upload } from 'lucide-react';
 import React from 'react';
 import { useRef, useState } from 'react';
 import { seedModels } from '../data.js';
+import { buildExcelExport, filterTradesByDate } from '../excelExport.js';
 import { buildExportArchive, parseImportArchive, parseImportPackage } from '../storage.js';
 import { Input, Metric, Textarea } from './ui.jsx';
 
-export default function SettingsView({ stats, trades, setTrades, models, setModels, setSelectedTradeId, aiConfig, setAiConfig, storageStatus, onClearData }) {
+export default function SettingsView({ stats, trades, setTrades, models, setModels, setSelectedTradeId, aiConfig, setAiConfig, tagPresets, setTagPresets, storageStatus, onClearData }) {
   const importRef = useRef(null);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [excelDateFrom, setExcelDateFrom] = useState('');
+  const [excelDateTo, setExcelDateTo] = useState('');
+  const excelTrades = filterTradesByDate(trades, excelDateFrom, excelDateTo);
 
   function updateAiConfig(key, value) {
     setAiConfig((current) => ({ ...current, [key]: value }));
   }
 
   async function exportData() {
-    const blob = await buildExportArchive(trades, models, aiConfig);
+    const blob = await buildExportArchive(trades, models, aiConfig, tagPresets);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `smc-journal-export-${new Date().toISOString().slice(0, 10)}.smcj.zip`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportExcel() {
+    const blob = await buildExcelExport(trades, { dateFrom: excelDateFrom, dateTo: excelDateTo });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `smc-journal-trades-${excelDateFrom || 'all'}-${excelDateTo || 'all'}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -36,6 +50,9 @@ export default function SettingsView({ stats, trades, setTrades, models, setMode
       setModels(nextPackage.models?.length ? nextPackage.models : seedModels);
       if (nextPackage.aiConfig) {
         setAiConfig((current) => ({ ...current, ...nextPackage.aiConfig, apiKey: nextPackage.aiConfig.apiKey || current.apiKey || '' }));
+      }
+      if (nextPackage.tagPresets?.length) {
+        setTagPresets(nextPackage.tagPresets);
       }
     } catch {
       alert('导入失败：请选择由 SMC Journal 导出的 .smcj.zip 文件。');
@@ -78,6 +95,29 @@ export default function SettingsView({ stats, trades, setTrades, models, setMode
                 导入 ZIP
               </button>
               <input ref={importRef} type="file" accept=".smcj.zip,.zip,application/zip,application/json,.json" hidden onChange={importData} />
+            </div>
+          </div>
+        </div>
+        <div className="mt-5 rounded-md border border-slate-700/70 bg-ink-950/45 p-4">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h3 className="font-semibold">导出 Excel</h3>
+              <p className="mt-1 text-sm text-slate-400">每行导出一笔交易，包含订单字段、交易计划、备注、复盘结论，并将下单/平仓截图嵌入同一行。</p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <DatePickerField label="开始日期" value={excelDateFrom} onChange={setExcelDateFrom} />
+              <DatePickerField label="结束日期" value={excelDateTo} onChange={setExcelDateTo} />
+              <div className="flex flex-col justify-end">
+                <button
+                  type="button"
+                  onClick={exportExcel}
+                  disabled={!excelTrades.length}
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Download size={16} />
+                  导出 Excel ({excelTrades.length})
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -164,5 +204,33 @@ export default function SettingsView({ stats, trades, setTrades, models, setMode
         </div>
       )}
     </section>
+  );
+}
+
+function DatePickerField({ label, value, onChange }) {
+  const inputRef = useRef(null);
+
+  function openPicker() {
+    inputRef.current?.showPicker?.();
+    inputRef.current?.focus();
+  }
+
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-slate-200">{label}</span>
+      <div className="flex rounded-md border border-slate-700 bg-ink-950/70 focus-within:border-cyan-400">
+        <input
+          ref={inputRef}
+          type="date"
+          value={value}
+          onClick={openPicker}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+        />
+        <button type="button" onClick={openPicker} className="border-l border-slate-700 px-3 text-slate-400 hover:text-cyan-200" aria-label={`选择${label}`}>
+          <Calendar size={16} />
+        </button>
+      </div>
+    </label>
   );
 }

@@ -7,6 +7,8 @@ import {
   modelStoreName,
   seedModels,
   settingsStoreName,
+  tagPresets,
+  tagPresetsKey,
   tradeStoreName,
 } from './data.js';
 import {
@@ -147,6 +149,20 @@ export async function loadAiConfigFromDb() {
   }
 }
 
+export async function loadTagPresetsFromDb() {
+  const db = await openJournalDb();
+  try {
+    const transaction = db.transaction(settingsStoreName, 'readonly');
+    const done = transactionDone(transaction);
+    const store = transaction.objectStore(settingsStoreName);
+    const record = await requestToPromise(store.get(tagPresetsKey));
+    await done;
+    return normalizeTagPresets(record?.value);
+  } finally {
+    closeDb(db);
+  }
+}
+
 export async function clearJournalDb() {
   const db = await openJournalDb();
   try {
@@ -171,6 +187,17 @@ export async function saveAiConfigToDb(aiConfig) {
   }
 }
 
+export async function saveTagPresetsToDb(presets) {
+  const db = await openJournalDb();
+  try {
+    const transaction = db.transaction(settingsStoreName, 'readwrite');
+    transaction.objectStore(settingsStoreName).put({ key: tagPresetsKey, value: normalizeTagPresets(presets) });
+    await transactionDone(transaction);
+  } finally {
+    closeDb(db);
+  }
+}
+
 function requestToPromise(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);
@@ -178,7 +205,7 @@ function requestToPromise(request) {
   });
 }
 
-export async function buildExportArchive(trades, models, aiConfig) {
+export async function buildExportArchive(trades, models, aiConfig, presets = tagPresets) {
   const exportedAt = new Date().toISOString();
   const storedTrades = trades.map(stripRuntimeTradeFields);
   const storedModels = models.map(normalizeModel);
@@ -210,6 +237,7 @@ export async function buildExportArchive(trades, models, aiConfig) {
       trades: 'trades.json',
       models: 'models.json',
       aiConfig: 'ai-config.json',
+      tagPresets: 'tag-presets.json',
       assets: assetEntries.map(({ blob, ...asset }) => asset),
     },
   };
@@ -219,6 +247,7 @@ export async function buildExportArchive(trades, models, aiConfig) {
     { path: 'trades.json', data: encodeJson(storedTrades) },
     { path: 'models.json', data: encodeJson(storedModels) },
     { path: 'ai-config.json', data: encodeJson(publicAiConfig) },
+    { path: 'tag-presets.json', data: encodeJson(normalizeTagPresets(presets)) },
   ];
   for (const asset of assetEntries) {
     entries.push({ path: asset.file, data: new Uint8Array(await asset.blob.arrayBuffer()) });
@@ -233,6 +262,9 @@ export async function parseImportArchive(buffer) {
   const trades = parseJsonFile(files, manifest.files?.trades || 'trades.json');
   const models = files.has(manifest.files?.models || 'models.json') ? parseJsonFile(files, manifest.files?.models || 'models.json') : seedModels;
   const aiConfig = parseJsonFile(files, manifest.files?.aiConfig || 'ai-config.json');
+  const importedTagPresets = files.has(manifest.files?.tagPresets || 'tag-presets.json')
+    ? parseJsonFile(files, manifest.files?.tagPresets || 'tag-presets.json')
+    : tagPresets;
   const assets = new Map((manifest.files?.assets || []).map((asset) => [asset.id, asset]));
   return {
     trades: trades.map((trade) => {
@@ -256,6 +288,7 @@ export async function parseImportArchive(buffer) {
     }),
     models: models.map(normalizeModel),
     aiConfig,
+    tagPresets: normalizeTagPresets(importedTagPresets),
   };
 }
 
@@ -266,7 +299,14 @@ export function parseImportPackage(parsed) {
     trades: importedTrades.map((trade) => normalizeTrade({ ...trade, image: '' })),
     models: (parsed.models || parsed.data?.models || seedModels).map(normalizeModel),
     aiConfig: parsed.aiConfig || parsed.data?.aiConfig,
+    tagPresets: normalizeTagPresets(parsed.tagPresets || parsed.data?.tagPresets || tagPresets),
   };
+}
+
+function normalizeTagPresets(presets) {
+  const source = Array.isArray(presets) ? presets : tagPresets;
+  const next = source.map((tag) => String(tag || '').trim()).filter(Boolean);
+  return [...new Set([...tagPresets, ...next])];
 }
 
 function encodeJson(value) {

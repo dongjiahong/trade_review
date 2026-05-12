@@ -2,6 +2,7 @@ import { calculateRiskReward } from './tradeMath.js';
 
 export function buildTradePlan(source, models = []) {
   const model = models.find((item) => item.name === source.model);
+  const modelRulesSource = getModelRulesForDirection(model, source.direction);
   const rMultiple = calculateRiskReward(source);
   const pricePlan = [
     `方向：${source.direction || '待补充'}`,
@@ -17,10 +18,10 @@ export function buildTradePlan(source, models = []) {
     source.stop ? `失效价：${source.direction === '空' ? '价格上破' : '价格下破'} ${source.stop}` : '失效价：待补充止损价',
   ];
   const modelRules = [
-    model?.logic && `模型逻辑：${model.logic}`,
-    model?.points?.length && `模型条件：${model.points.join('；')}`,
-    model?.triggers?.length && `模型触发：${model.triggers.join('；')}`,
-    model?.fail && `模型失效：${model.fail}`,
+    modelRulesSource?.logic && `模型逻辑：${modelRulesSource.logic}`,
+    modelRulesSource?.points?.length && `模型条件：${modelRulesSource.points.join('；')}`,
+    modelRulesSource?.triggers?.length && `模型触发：${modelRulesSource.triggers.join('；')}`,
+    modelRulesSource?.fail && `模型失效：${modelRulesSource.fail}`,
   ].filter(Boolean);
   const sections = [
     ['交易品种', source.symbol || '待补充'],
@@ -34,6 +35,13 @@ export function buildTradePlan(source, models = []) {
     ['执行清单', source.checklist?.length ? source.checklist.join('；') : '待补充'],
   ];
   return sections.map(([title, body]) => `【${title}】\n${body}`).join('\n\n');
+}
+
+function getModelRulesForDirection(model, direction) {
+  if (!model) return null;
+  if (direction === '空') return model.directionRules?.short || model;
+  if (direction === '多') return model.directionRules?.long || model;
+  return model;
 }
 
 export function getPlanMissingItems(source) {

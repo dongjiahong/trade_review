@@ -5,6 +5,7 @@ export const assetStoreName = 'assets';
 export const modelStoreName = 'models';
 export const settingsStoreName = 'settings';
 export const aiConfigKey = 'ai-config';
+export const tagPresetsKey = 'tag-presets';
 
 export const defaultAiConfig = {
   enabled: true,
@@ -17,7 +18,7 @@ export const defaultAiConfig = {
 
 export const tagPresets = ['扫流', 'FVG', 'OB', 'ChoCH', 'Breaker', '顺势', '逆势', '待结果', '复盘'];
 
-export const seedModels = [
+const baseSeedModels = [
   {
     id: 'model-liquidity-sweep-choch',
     name: 'Liquidity Sweep + ChoCH',
@@ -111,27 +112,81 @@ export const seedModels = [
   },
 ];
 
+const shortDirectionRules = {
+  'model-liquidity-sweep-choch': {
+    logic: '价格先扫掉前高流动性，制造假突破；随后快速收回并打破相反方向的小结构，形成 ChoCH，说明订单流可能短线转空。',
+    points: ['高周期位于 Premium 区或供应区附近', '价格向上扫前高，等待高点附近推高点', '扫高后快速收回', '向下跌破最近低点或形成 ChoCH', '回踩 Bearish FVG / OB / 结构位'],
+    triggers: ['扫高后强阴收回关键高点', 'ChoCH 后回踩 Bearish FVG / OB 入场', '小级别再 BOS 后入场'],
+    fail: '扫高后继续上涨不收回；回踩区域被快速上破；入场后重新站上 Sweep High。',
+    keyPoints: ['不要见到刺破前高就立刻做空', '确认入场通常在 ChoCH 后第一次回踩', '止损放 Sweep High 上方'],
+  },
+  'model-fvg-continuation': {
+    logic: '下跌趋势中强推动形成 Bearish FVG，不平衡区域在回踩时提供顺势做空机会。',
+    points: ['高周期方向看空，结构保持 Lower High / Lower Low', '强势下跌推动留下明显 Bearish FVG', '推动后完成 BOS', '回踩进入 FVG 50% 或上沿，但不突破前起点', '小周期出现拒绝上涨 / 反包 / BOS'],
+    triggers: ['FVG 50% 附近出现结构反应', 'FVG 上沿出现上影线或强阴反包', '小周期从 FVG 内向下 BOS'],
+    fail: 'FVG 被完全填补后继续上破；突破推动起点；FVG 内长时间横盘无反应。',
+    keyPoints: ['必须有趋势背景', '最好配合 BOS：先 BOS，再靠 FVG 回踩', 'FVG 靠近 Premium、OB、结构位时质量更高'],
+  },
+  'model-ob-reversal': {
+    logic: '价格在供应区附近完成派发后出现强下跌并打破结构，未来第一次回踩该 Bearish OB 时可能出现二次转空反应。',
+    points: ['找到下跌推动前最后一根明显 bullish candle', 'OB 之后出现强下跌，不是普通小回调', '推动打破结构低点，形成 BOS 或 ChoCH', '回踩 OB 时最好位于 Premium 区', '小周期出现拒绝 / 反包 / BOS / ChoCH'],
+    triggers: ['第一次回踩未测试过的 Bearish OB', 'OB 与 FVG、结构位、扫流动性共振', '小周期从 OB 内部转空'],
+    fail: 'OB 被实体完全上破；多次回踩反应减弱；OB 后推动没有破结构。',
+    keyPoints: ['不是所有最后一根反向 K 都是 OB', '第一次回踩价值更高', '最好结合 Sweep、FVG、BOS / ChoCH'],
+  },
+  'model-breaker-retest': {
+    logic: '下跌趋势中的价格跌破前结构低点形成 BOS，说明方向向下；随后等回踩结构位、FVG 或 OB 再顺势入场。',
+    points: ['高周期方向看空', '价格形成 Lower High 后跌破前低，出现 BOS', 'BOS 以实体跌破而不是单纯影线', 'BOS 后回踩不突破前一个 Lower High', '回踩区域以内周期给出强信号'],
+    triggers: ['回踩 BOS 结构位遇阻', '回踩 FVG / OB 后出现小周期 BOS', '回踩中扫掉弱高点后快速收回'],
+    fail: 'BOS 后迅速站回区间；回踩突破 Lower High；回踩区反复反应后继续上破。',
+    keyPoints: ['BOS 是方向确认，不是追单信号', '最好的交易发生在 BOS 后回踩', '更适合趋势行情'],
+  },
+  'model-inducement-sweep-poi': {
+    logic: '真正供应 POI 前方先制造诱导高点，引诱提前入场或止损集中；随后价格扫描 inducement，再进入真正 POI 并转空。',
+    points: ['高周期有明确供应 POI', 'POI 下方形成诱导高点', '价格到达 inducement high', '随后进入真正 POI', '小周期出现 ChoCH 或 BOS'],
+    triggers: ['扫诱导高点后快速收回', 'POI 内强阴反包', '回踩小 FVG 后入场'],
+    fail: '扫单后未进入 POI；POI 被多次测试；POI 内无反应直接上破。',
+    keyPoints: ['真正优质位置通常在 inducement 后面', '不要在诱导点提前进场'],
+  },
+  'model-breaker-block': {
+    logic: '原本有效的需求区或 Bullish OB 被跌破后角色转换，未来回踩时可能变成反向阻力。',
+    points: ['原先存在 bullish OB / 需求区', '价格强势跌破并形成 BOS', '被跌破区域转换为 Bearish Breaker', '回踩时出现反应', '小周期转弱'],
+    triggers: ['回踩 Breaker 后形成上涨衰竭', '小周期 ChoCH / BOS', '与 FVG、结构位、Premium 共振'],
+    fail: '回踩时重新站回需求区上方；区域无反应；跌破动能不足。',
+    keyPoints: ['先有明确跌破，再谈 Breaker', '回踩时最好等低周期确认'],
+  },
+  'model-equal-highs-lows-run': {
+    logic: '等高是明显流动性池，价格常先扫上方买方流动性，再收回并选择向下。',
+    points: ['上方存在 Equal Highs 或明显前高流动性', '价格向上测试等高', '刺破后不能继续上派而快速收回', '小周期出现 ChoCH', '回踩 bearish FVG / OB 确定'],
+    triggers: ['扫等高后强阴收回', '跌破结构低点形成 ChoCH', '回踩 FVG / OB 出现拒绝'],
+    fail: '扫等高后继续站稳上方；ChoCH 失败；上方还有更大级别流动性。',
+    keyPoints: ['等高是目标区域，但不是天然反转位', '必须看收回和结构改变'],
+  },
+};
+
+function buildLongRules(model) {
+  return {
+    logic: model.logic,
+    points: model.points,
+    triggers: model.triggers,
+    fail: model.fail,
+    keyPoints: model.keyPoints,
+  };
+}
+
+export const seedModels = baseSeedModels.map((model) => ({
+  ...model,
+  directionRules: {
+    long: buildLongRules(model),
+    short: shortDirectionRules[model.id] || buildLongRules(model),
+  },
+}));
+
 export function mergeSeedModelDetails(storedModels = []) {
   if (!storedModels.length) return seedModels;
-  const storedById = new Map(storedModels.map((model) => [model.id, model]));
-  const storedByName = new Map(storedModels.map((model) => [model.name, model]));
-  const mergedSeeds = seedModels.map((seed) => {
-    const stored = storedById.get(seed.id) || storedByName.get(seed.name);
-    return stored
-      ? {
-          ...seed,
-          ...stored,
-          referenceImage: seed.referenceImage,
-          points: stored.points?.length ? stored.points : seed.points,
-          triggers: stored.triggers?.length ? stored.triggers : seed.triggers,
-          keyPoints: stored.keyPoints?.length ? stored.keyPoints : seed.keyPoints,
-          fail: stored.fail || seed.fail,
-        }
-      : seed;
-  });
   const knownIds = new Set(seedModels.map((model) => model.id));
   const customModels = storedModels.filter((model) => !knownIds.has(model.id));
-  return [...mergedSeeds, ...customModels];
+  return [...seedModels, ...customModels];
 }
 
 export const seedTrades = [

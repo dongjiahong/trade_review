@@ -71,7 +71,7 @@ export default function PasteImagePanel({ label = 'K 线截图', image, onImage,
       }`}
     >
       <div className="mb-2 text-sm font-medium text-slate-200">
-        {label} <span className="text-slate-500">可粘贴 / 拖拽 / 上传</span>
+        {label} <span className="text-slate-500">单击粘贴 / 拖拽 / 双击上传</span>
       </div>
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={(event) => readFile(event.target.files[0])} />
       {image ? (
@@ -100,13 +100,14 @@ export default function PasteImagePanel({ label = 'K 线截图', image, onImage,
       ) : (
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => panelRef.current?.focus()}
+          onDoubleClick={() => fileRef.current?.click()}
           className={`grid w-full place-items-center rounded text-center text-slate-300 ${compact ? 'min-h-28' : 'min-h-56'}`}
         >
           <div>
             <ImagePlus className="mx-auto mb-3 text-cyan-300" size={compact ? 28 : 38} />
-            <div className="font-medium">粘贴、拖拽或上传截图</div>
-            <div className="mt-1 text-xs text-slate-500">点击此区域后可 Ctrl+V / Cmd+V，支持 PNG / JPG / WebP</div>
+            <div className="font-medium">粘贴、拖拽或双击上传截图</div>
+            <div className="mt-1 text-xs text-slate-500">单击聚焦后可 Ctrl+V / Cmd+V，双击打开文件选择</div>
           </div>
         </button>
       )}

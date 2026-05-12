@@ -42,7 +42,7 @@ export function normalizeTrade(trade) {
 }
 
 export function normalizeModel(model) {
-  return {
+  const base = {
     id: model.id || createId('model'),
     name: model.name || '未命名模型',
     title: model.title || '',
@@ -56,6 +56,34 @@ export function normalizeModel(model) {
     triggers: Array.isArray(model.triggers) ? model.triggers : [],
     keyPoints: Array.isArray(model.keyPoints) ? model.keyPoints : [],
     fail: model.fail || '补充模型失效条件。',
+  };
+  const directionRules = normalizeDirectionRules(model.directionRules, base);
+  const longRules = directionRules.long;
+  return {
+    ...base,
+    logic: longRules.logic,
+    points: longRules.points,
+    triggers: longRules.triggers,
+    keyPoints: longRules.keyPoints,
+    fail: longRules.fail,
+    directionRules,
+  };
+}
+
+function normalizeDirectionRules(directionRules = {}, fallback) {
+  return {
+    long: normalizeRuleSet(directionRules.long || directionRules['多'], fallback),
+    short: normalizeRuleSet(directionRules.short || directionRules['空'], fallback),
+  };
+}
+
+function normalizeRuleSet(ruleSet = {}, fallback) {
+  return {
+    logic: ruleSet.logic || fallback.logic || '',
+    points: Array.isArray(ruleSet.points) && ruleSet.points.length ? ruleSet.points : fallback.points,
+    triggers: Array.isArray(ruleSet.triggers) ? ruleSet.triggers : fallback.triggers,
+    fail: ruleSet.fail || fallback.fail || '补充模型失效条件。',
+    keyPoints: Array.isArray(ruleSet.keyPoints) ? ruleSet.keyPoints : fallback.keyPoints,
   };
 }
 

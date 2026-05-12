@@ -1,13 +1,44 @@
 import { BookOpen, CircleX, Star, Target, Trash2, Zap } from 'lucide-react';
 import React from 'react';
+import { useState } from 'react';
 import { Input, Textarea } from './ui.jsx';
 
-export default function ModelEditor({ model, canDelete, onUpdate, onDelete, referenceChart }) {
+const directionTabs = [
+  { key: 'long', label: '做多描述' },
+  { key: 'short', label: '做空描述' },
+];
+
+export default function ModelEditor({ model, canDelete, onToggleFavorite, onUpdate, onDelete, referenceChart }) {
+  const [activeDirection, setActiveDirection] = useState('long');
+  const activeRules = model.directionRules?.[activeDirection] || emptyRules();
+
+  function updateRules(patch) {
+    onUpdate({
+      directionRules: {
+        ...model.directionRules,
+        [activeDirection]: {
+          ...activeRules,
+          ...patch,
+        },
+      },
+    });
+  }
+
   return (
-    <div className="border-t border-slate-700/70 p-4 pt-3">
-      <div className="mb-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <div className="p-4">
+      <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
         <Input label="模型名称" value={model.name} onChange={(value) => onUpdate({ name: value })} placeholder="例如 Liquidity Sweep + ChoCH" />
         <Input label="模型标题" value={model.title} onChange={(value) => onUpdate({ title: value })} placeholder="例如 反转模型" />
+        <button
+          type="button"
+          onClick={onToggleFavorite}
+          className={`mt-7 inline-flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold ${
+            model.favorite ? 'border-amber-400/45 bg-amber-500/10 text-amber-100' : 'border-slate-700 text-slate-300 hover:bg-slate-800'
+          }`}
+        >
+          <Star className={model.favorite ? 'fill-amber-300' : ''} size={16} />
+          收藏
+        </button>
         {canDelete && (
           <button
             type="button"
@@ -19,24 +50,59 @@ export default function ModelEditor({ model, canDelete, onUpdate, onDelete, refe
           </button>
         )}
       </div>
-      <div className="mb-3 grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
-        <Textarea label="模型逻辑" value={model.logic} onChange={(value) => onUpdate({ logic: value })} placeholder="描述这个模型成立的市场背景和订单流逻辑" />
+      <div className="mb-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div>
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            {directionTabs.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveDirection(tab.key)}
+                className={`rounded-md border px-3 py-2 text-sm font-semibold ${
+                  activeDirection === tab.key
+                    ? tab.key === 'long'
+                      ? 'border-emerald-400 bg-emerald-500/18 text-emerald-100'
+                      : 'border-rose-400 bg-rose-500/18 text-rose-100'
+                    : 'border-slate-700 bg-ink-950/70 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <Textarea
+            label="模型逻辑"
+            value={activeRules.logic}
+            onChange={(value) => updateRules({ logic: value })}
+            placeholder="描述这个方向下模型成立的市场背景和订单流逻辑"
+          />
+        </div>
         {referenceChart}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
-        <ListTextarea icon={Target} label="条件" value={model.points} tone="cyan" onChange={(value) => onUpdate({ points: value })} />
-        <ListTextarea icon={Zap} label="触发" value={model.triggers} tone="amber" onChange={(value) => onUpdate({ triggers: value })} />
-        <Textarea label="失效" value={model.fail} onChange={(value) => onUpdate({ fail: value })} placeholder="描述模型失效条件" />
-        <ListTextarea icon={Star} label="要点" value={model.keyPoints} tone="blue" onChange={(value) => onUpdate({ keyPoints: value })} />
+        <ListTextarea icon={Target} label="条件" value={activeRules.points} tone="cyan" onChange={(value) => updateRules({ points: value })} />
+        <ListTextarea icon={Zap} label="触发" value={activeRules.triggers} tone="amber" onChange={(value) => updateRules({ triggers: value })} />
+        <Textarea label="失效" value={activeRules.fail} onChange={(value) => updateRules({ fail: value })} placeholder="描述模型失效条件" />
+        <ListTextarea icon={Star} label="要点" value={activeRules.keyPoints} tone="blue" onChange={(value) => updateRules({ keyPoints: value })} />
       </div>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <ModelList icon={Target} title="条件预览" items={model.points} tone="cyan" />
-        <ModelList icon={Zap} title="触发预览" items={model.triggers} tone="amber" />
-        <ModelList icon={CircleX} title="失效预览" items={splitText(model.fail)} tone="rose" />
-        <ModelList icon={BookOpen} title="要点预览" items={model.keyPoints} tone="blue" />
+        <ModelList icon={Target} title="条件预览" items={activeRules.points} tone="cyan" />
+        <ModelList icon={Zap} title="触发预览" items={activeRules.triggers} tone="amber" />
+        <ModelList icon={CircleX} title="失效预览" items={splitText(activeRules.fail)} tone="rose" />
+        <ModelList icon={BookOpen} title="要点预览" items={activeRules.keyPoints} tone="blue" />
       </div>
     </div>
   );
+}
+
+function emptyRules() {
+  return {
+    logic: '',
+    points: ['补充模型成立条件'],
+    triggers: [],
+    fail: '补充模型失效条件。',
+    keyPoints: [],
+  };
 }
 
 function ListTextarea({ icon: Icon, label, value, tone, onChange }) {

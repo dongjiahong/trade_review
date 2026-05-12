@@ -25,20 +25,25 @@ export default function OrdersView(props) {
     onNewTrade,
   } = props;
   const selectedTrade = allTrades.find((trade) => trade.id === selectedTradeId) ?? allTrades[0];
-  const [openMenuTradeId, setOpenMenuTradeId] = useState('');
+  const [openMenu, setOpenMenu] = useState(null);
+  const openMenuTradeId = openMenu?.tradeId || '';
 
   useEffect(() => {
     if (!openMenuTradeId) return undefined;
     function closeMenu() {
-      setOpenMenuTradeId('');
+      setOpenMenu(null);
     }
     function handleKeyDown(event) {
       if (event.key === 'Escape') closeMenu();
     }
     document.addEventListener('click', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+    window.addEventListener('resize', closeMenu);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('click', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+      window.removeEventListener('resize', closeMenu);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [openMenuTradeId]);
@@ -115,7 +120,16 @@ export default function OrdersView(props) {
                       type="button"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setOpenMenuTradeId((current) => (current === trade.id ? '' : trade.id));
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setOpenMenu((current) => (
+                          current?.tradeId === trade.id
+                            ? null
+                            : {
+                                tradeId: trade.id,
+                                top: rect.bottom + 6,
+                                left: Math.max(8, Math.min(rect.right - 144, window.innerWidth - 152)),
+                              }
+                        ));
                       }}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                       aria-label="订单操作"
@@ -126,13 +140,14 @@ export default function OrdersView(props) {
                     {openMenuTradeId === trade.id && (
                       <div
                         onClick={(event) => event.stopPropagation()}
-                        className="absolute right-3 top-10 z-30 w-36 rounded-md border border-slate-700 bg-ink-950 py-1 shadow-glow"
+                        style={{ top: openMenu.top, left: openMenu.left }}
+                        className="fixed z-50 w-36 rounded-md border border-slate-700 bg-ink-950 py-1 shadow-glow"
                       >
                         <button
                           type="button"
                           onClick={() => {
                             onSelect(trade.id);
-                            setOpenMenuTradeId('');
+                            setOpenMenu(null);
                           }}
                           className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-slate-800"
                         >
@@ -142,7 +157,7 @@ export default function OrdersView(props) {
                           type="button"
                           onClick={() => {
                             onDelete(trade.id);
-                            setOpenMenuTradeId('');
+                            setOpenMenu(null);
                           }}
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-rose-200 hover:bg-rose-500/12"
                         >

@@ -1,6 +1,6 @@
-import { Check, Save, X } from 'lucide-react';
+import { Check, Plus, Save, X } from 'lucide-react';
 import React from 'react';
-import { tagPresets } from '../data.js';
+import { useState } from 'react';
 import { imagePatchFromAsset } from '../tradeAssets.js';
 import { calculateRiskReward } from '../tradeMath.js';
 import { buildTradePlan, getPlanMissingItems } from '../tradePlan.js';
@@ -8,7 +8,8 @@ import { resultLabels } from '../tradeUtils.js';
 import PasteImagePanel from './PasteImagePanel.jsx';
 import { Input, Metric, SelectField, Segmented, Textarea } from './ui.jsx';
 
-export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft, models }) {
+export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft, models, tagPresets, defaultTagPresets, onAddTagPreset, onDeleteTagPreset }) {
+  const [newTagPreset, setNewTagPreset] = useState('');
   const canSave = form.symbol && form.entry && form.stop && form.target;
   const computedR = calculateRiskReward(form);
   const generatedPlan = buildTradePlan(form, models);
@@ -27,6 +28,11 @@ export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft
       const nextTags = tags.includes(tag) ? tags.filter((item) => item !== tag) : [...tags, tag];
       return { ...current, tags: nextTags.join(' ') };
     });
+  }
+
+  function addPreset() {
+    onAddTagPreset(newTagPreset);
+    setNewTagPreset('');
   }
 
   return (
@@ -48,7 +54,7 @@ export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft
               <div className="grid gap-3 md:grid-cols-3">
                 <Input label="日期" type="datetime-local" value={form.date ?? ''} onChange={(value) => update('date', value)} />
                 <SelectField label="品种" value={form.symbol} onChange={(value) => update('symbol', value)} options={['EUR/USD', 'GBP/USD', 'XAU/USD', 'NAS100', 'US30', 'BTC/USD']} />
-                <SelectField label="时间框架" value={form.timeframe} onChange={(value) => update('timeframe', value)} options={['1M', '3M', '5M', '15M', '30M', '1H', '4H', '1D']} />
+                <SelectField label="时间框架" value={form.timeframe} onChange={(value) => update('timeframe', value)} options={['1M', '3M', '5M', '10M', '15M', '30M', '1H', '4H', '1D']} />
               </div>
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 <Segmented label="方向" value={form.direction} onChange={(value) => update('direction', value)} options={['多', '空']} />
@@ -84,18 +90,47 @@ export default function TradeModal({ form, setForm, onClose, onSave, onSaveDraft
                   {tagPresets.map((tag) => {
                     const active = String(form.tags || '').split(/[,\s，]+/).includes(tag);
                     return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => toggleTag(tag)}
-                        className={`rounded-md border px-2.5 py-1 text-xs ${
-                          active ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100' : 'border-slate-700 bg-ink-950/60 text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        {tag}
-                      </button>
+                      <span key={tag} className={`inline-flex items-center rounded-md border text-xs ${
+                        active ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100' : 'border-slate-700 bg-ink-950/60 text-slate-400'
+                      }`}>
+                        <button type="button" onClick={() => toggleTag(tag)} className="px-2.5 py-1 hover:text-slate-100">
+                          {tag}
+                        </button>
+                        {!defaultTagPresets.includes(tag) && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteTagPreset(tag)}
+                            className="border-l border-slate-700 px-1.5 py-1 text-slate-500 hover:text-rose-200"
+                            aria-label={`删除预设标签 ${tag}`}
+                          >
+                            <X size={12} />
+                          </button>
+                        )}
+                      </span>
                     );
                   })}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <input
+                    value={newTagPreset}
+                    onChange={(event) => setNewTagPreset(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        addPreset();
+                      }
+                    }}
+                    placeholder="新增预设标签"
+                    className="rounded-md border border-slate-700 bg-ink-950/70 px-3 py-2 text-sm outline-none placeholder:text-slate-600 focus:border-cyan-400"
+                  />
+                  <button
+                    type="button"
+                    onClick={addPreset}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+                  >
+                    <Plus size={16} />
+                    添加预设
+                  </button>
                 </div>
               </div>
             </div>

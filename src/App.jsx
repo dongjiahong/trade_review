@@ -7,8 +7,8 @@ import ReviewView from './components/ReviewView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import TradeModal from './components/TradeModal.jsx';
-import { defaultAiConfig, emptyForm, mergeSeedModelDetails, seedModels } from './data.js';
-import { clearJournalDb, loadAiConfigFromDb, loadModelsFromDb, loadTradesFromDb, saveAiConfigToDb, saveModelsToDb, saveTradesToDb } from './storage.js';
+import { defaultAiConfig, emptyForm, mergeSeedModelDetails, seedModels, tagPresets as defaultTagPresets } from './data.js';
+import { clearJournalDb, loadAiConfigFromDb, loadModelsFromDb, loadTagPresetsFromDb, loadTradesFromDb, saveAiConfigToDb, saveModelsToDb, saveTagPresetsToDb, saveTradesToDb } from './storage.js';
 import { createId, normalizeModel, normalizeTrade } from './tradeAssets.js';
 import { calculateRiskReward } from './tradeMath.js';
 import { buildTradePlan } from './tradePlan.js';
@@ -18,10 +18,11 @@ function App() {
   const [trades, setTrades] = useState([]);
   const [models, setModels] = useState(seedModels);
   const [aiConfig, setAiConfig] = useState(defaultAiConfig);
+  const [tagPresets, setTagPresets] = useState(defaultTagPresets);
   const [isHydrated, setIsHydrated] = useState(false);
   const [storageStatus, setStorageStatus] = useState('正在加载 IndexedDB...');
-  const persistenceReadyRef = useRef({ trades: false, models: false, aiConfig: false });
-  const initialPersistSkippedRef = useRef({ trades: false, models: false, aiConfig: false });
+  const persistenceReadyRef = useRef({ trades: false, models: false, aiConfig: false, tagPresets: false });
+  const initialPersistSkippedRef = useRef({ trades: false, models: false, aiConfig: false, tagPresets: false });
   const [activeView, setActiveView] = useState('orders');
   const [query, setQuery] = useState('');
   const [modelFilter, setModelFilter] = useState('全部模型');
@@ -34,13 +35,14 @@ function App() {
   useEffect(() => {
     let ignore = false;
     async function hydrate() {
-      const [tradesResult, modelsResult, aiConfigResult] = await Promise.allSettled([loadTradesFromDb(), loadModelsFromDb(), loadAiConfigFromDb()]);
+      const [tradesResult, modelsResult, aiConfigResult, tagPresetsResult] = await Promise.allSettled([loadTradesFromDb(), loadModelsFromDb(), loadAiConfigFromDb(), loadTagPresetsFromDb()]);
       if (ignore) return;
 
       const ready = {
         trades: tradesResult.status === 'fulfilled',
         models: modelsResult.status === 'fulfilled',
         aiConfig: aiConfigResult.status === 'fulfilled',
+        tagPresets: tagPresetsResult.status === 'fulfilled',
       };
       persistenceReadyRef.current = ready;
 
@@ -49,11 +51,13 @@ function App() {
       setSelectedTradeId(nextTrades[0]?.id ?? '');
       setModels(ready.models ? mergeSeedModelDetails(modelsResult.value) : seedModels);
       setAiConfig(ready.aiConfig ? aiConfigResult.value : defaultAiConfig);
+      setTagPresets(ready.tagPresets ? tagPresetsResult.value : defaultTagPresets);
 
       const failedStores = [
         ready.trades ? '' : '订单',
         ready.models ? '' : '模型',
         ready.aiConfig ? '' : 'AI 配置',
+        ready.tagPresets ? '' : '标签预设',
       ].filter(Boolean);
       setStorageStatus(failedStores.length ? `IndexedDB 部分加载失败：${failedStores.join('、')}暂不自动覆盖` : 'IndexedDB 已连接');
       setIsHydrated(true);
@@ -92,6 +96,15 @@ function App() {
     }
     saveModelsToDb(models).catch(() => setStorageStatus('模型保存失败'));
   }, [isHydrated, models]);
+
+  useEffect(() => {
+    if (!isHydrated || !persistenceReadyRef.current.tagPresets) return;
+    if (!initialPersistSkippedRef.current.tagPresets) {
+      initialPersistSkippedRef.current.tagPresets = true;
+      return;
+    }
+    saveTagPresetsToDb(tagPresets).catch(() => setStorageStatus('标签预设保存失败'));
+  }, [isHydrated, tagPresets]);
 
   const selectedTrade = trades.find((trade) => trade.id === selectedTradeId) ?? trades[0];
 
@@ -188,6 +201,17 @@ function App() {
     );
   }
 
+  function addTagPreset(tag) {
+    const normalized = String(tag || '').trim();
+    if (!normalized) return;
+    setTagPresets((current) => (current.includes(normalized) ? current : [...current, normalized]));
+  }
+
+  function deleteTagPreset(tag) {
+    if (defaultTagPresets.includes(tag)) return;
+    setTagPresets((current) => current.filter((item) => item !== tag));
+  }
+
   function createModel() {
     const index = models.length + 1;
     const model = normalizeModel({
@@ -195,8 +219,22 @@ function App() {
       name: `自定义模型 ${index}`,
       favorite: false,
       accent: ['cyan', 'emerald', 'amber', 'rose'][index % 4],
-      points: ['补充模型成立条件', '补充触发信号', '补充入场管理规则'],
-      fail: '补充模型失效条件。',
+      directionRules: {
+        long: {
+          logic: '',
+          points: ['补充做多模型成立条件', '补充做多触发信号', '补充做多入场管理规则'],
+          triggers: [],
+          fail: '补充做多模型失效条件。',
+          keyPoints: [],
+        },
+        short: {
+          logic: '',
+          points: ['补充做空模型成立条件', '补充做空触发信号', '补充做空入场管理规则'],
+          triggers: [],
+          fail: '补充做空模型失效条件。',
+          keyPoints: [],
+        },
+      },
     });
     setModels((current) => [...current, model]);
     setLastCreatedModelId(model.id);
@@ -232,11 +270,12 @@ function App() {
   async function clearAllData() {
     try {
       await clearJournalDb();
-      persistenceReadyRef.current = { trades: true, models: true, aiConfig: true };
-      initialPersistSkippedRef.current = { trades: true, models: true, aiConfig: true };
+      persistenceReadyRef.current = { trades: true, models: true, aiConfig: true, tagPresets: true };
+      initialPersistSkippedRef.current = { trades: true, models: true, aiConfig: true, tagPresets: true };
       setTrades([]);
       setModels(seedModels);
       setAiConfig(defaultAiConfig);
+      setTagPresets(defaultTagPresets);
       setSelectedTradeId('');
       setStorageStatus('已清空，等待新数据');
     } catch {
@@ -299,6 +338,8 @@ function App() {
               setSelectedTradeId={setSelectedTradeId}
               aiConfig={aiConfig}
               setAiConfig={setAiConfig}
+              tagPresets={tagPresets}
+              setTagPresets={setTagPresets}
               storageStatus={storageStatus}
               onClearData={clearAllData}
             />
@@ -313,6 +354,10 @@ function App() {
           onSave={saveTrade}
           onSaveDraft={saveDraft}
           models={models}
+          tagPresets={tagPresets}
+          defaultTagPresets={defaultTagPresets}
+          onAddTagPreset={addTagPreset}
+          onDeleteTagPreset={deleteTagPreset}
         />
       )}
     </div>
