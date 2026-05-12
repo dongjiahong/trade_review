@@ -1,13 +1,17 @@
 import { AlertTriangle, BarChart3, ListChecks, ShieldCheck, Sparkles, X } from 'lucide-react';
 import React from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { analyzeTradeWithAi, getAiConfigMissingItems } from '../aiReview.js';
 import { buildInsight, formatDate, formatProfit, percent, resultLabels } from '../tradeUtils.js';
 import DistributionList from './DistributionList.jsx';
 import ImageLightbox from './ImageLightbox.jsx';
 import { Metric, ResultBadge, Select, TextBlock } from './ui.jsx';
 
-export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, stats, models }) {
+export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, stats, models, aiConfig }) {
   const [previewImage, setPreviewImage] = useState('');
+  const [aiReview, setAiReview] = useState(null);
+  const [aiStatus, setAiStatus] = useState('idle');
+  const [aiError, setAiError] = useState('');
   const insight = buildInsight(trades, models);
   const closedTrades = trades.filter((trade) => trade.result !== 'pending');
   const modelRows = models.map((model) => {
@@ -59,6 +63,35 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
     stats.pending > 0 && '进行中订单完成后再更新结果和利润。',
     '导出 ZIP 备份后再进行大批量清理或导入。',
   ].filter(Boolean);
+  const aiMissingItems = getAiConfigMissingItems(aiConfig);
+  const displayedReview = aiReview || {
+    rating: selectedTrade?.result === 'win' ? '优秀' : selectedTrade?.result === 'loss' ? '高风险' : '待确认',
+    summary: aiSummary,
+    problems: aiProblems,
+    recurringErrors: recurringErrors.length ? recurringErrors : ['暂无重复问题，继续积累样本。'],
+    positives: positives.length ? positives : ['暂无完结数据，先录入订单。'],
+    actionItems,
+    evidenceGaps: [],
+  };
+
+  useEffect(() => {
+    setAiReview(null);
+    setAiError('');
+    setAiStatus('idle');
+  }, [selectedTrade?.id]);
+
+  async function runAiReview() {
+    setAiStatus('loading');
+    setAiError('');
+    try {
+      const nextReview = await analyzeTradeWithAi({ aiConfig, trade: selectedTrade, models });
+      setAiReview(nextReview);
+      setAiStatus('done');
+    } catch (error) {
+      setAiError(error.message || 'AI 分析失败。');
+      setAiStatus('error');
+    }
+  }
 
   return (
     <section className="grid gap-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto xl:grid-cols-[240px_minmax(360px,1fr)] 2xl:grid-cols-[240px_minmax(380px,1fr)_300px_270px]">
@@ -160,14 +193,31 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
               <Sparkles size={17} />
               AI智能复盘分析
             </h2>
-            <button className="rounded-md border border-slate-700 bg-ink-950/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">重新分析</button>
+            <button
+              type="button"
+              onClick={runAiReview}
+              disabled={aiStatus === 'loading' || !selectedTrade}
+              className="rounded-md border border-slate-700 bg-ink-950/70 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {aiStatus === 'loading' ? '分析中...' : aiReview ? '重新分析' : '开始分析'}
+            </button>
           </div>
+          {aiMissingItems.length > 0 && (
+            <div className="mb-3 rounded-md border border-amber-400/25 bg-amber-500/10 p-3 text-sm leading-6 text-amber-100">
+              请先到设置页填写 AI 配置：{aiMissingItems.join('、')}。
+            </div>
+          )}
+          {aiError && (
+            <div className="mb-3 rounded-md border border-rose-400/25 bg-rose-500/10 p-3 text-sm leading-6 text-rose-100">
+              {aiError}
+            </div>
+          )}
           <div className="rounded-md border border-cyan-400/20 bg-cyan-500/8 p-3">
             <div className="mb-1 flex items-center justify-between text-sm font-semibold text-cyan-100">
               <span>AI 总结</span>
-              <span>{selectedTrade?.result === 'win' ? '优秀' : selectedTrade?.result === 'loss' ? '高风险' : '待确认'}</span>
+              <span>{displayedReview.rating}</span>
             </div>
-            <p className="text-sm leading-6 text-slate-300">{aiSummary}</p>
+            <p className="whitespace-pre-wrap text-sm leading-6 text-slate-300">{displayedReview.summary}</p>
           </div>
           <div className="mt-3 rounded-md border border-amber-400/20 bg-amber-500/8 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-100">
@@ -175,18 +225,31 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
               发现的问题
             </div>
             <ol className="space-y-1 text-sm leading-6 text-slate-300">
-              {aiProblems.map((item, index) => (
+              {(displayedReview.problems.length ? displayedReview.problems : ['暂无明确问题。']).map((item, index) => (
                 <li key={item}>{index + 1}. {item}</li>
               ))}
             </ol>
           </div>
+          {displayedReview.evidenceGaps.length > 0 && (
+            <div className="mt-3 rounded-md border border-amber-400/20 bg-amber-500/8 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-100">
+                <AlertTriangle size={16} />
+                证据不足
+              </div>
+              <ol className="space-y-1 text-sm leading-6 text-slate-300">
+                {displayedReview.evidenceGaps.map((item, index) => (
+                  <li key={item}>{index + 1}. {item}</li>
+                ))}
+              </ol>
+            </div>
+          )}
           <div className="mt-3 rounded-md border border-rose-400/25 bg-rose-500/8 p-3">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-rose-100">
               <X size={16} />
               重复出现的错误
             </div>
             <ol className="space-y-1 text-sm leading-6 text-slate-300">
-              {(recurringErrors.length ? recurringErrors : ['暂无重复问题，继续积累样本。']).map((item, index) => (
+              {(displayedReview.recurringErrors.length ? displayedReview.recurringErrors : ['暂无重复问题，继续积累样本。']).map((item, index) => (
                 <li key={item}>{index + 1}. {item}</li>
               ))}
             </ol>
@@ -197,7 +260,7 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
               做得好的地方
             </div>
             <ul className="space-y-1 text-sm leading-6 text-slate-300">
-              {(positives.length ? positives : ['暂无完结数据，先录入订单。']).map((item) => (
+              {(displayedReview.positives.length ? displayedReview.positives : ['暂无完结数据，先录入订单。']).map((item) => (
                 <li key={item}>✓ {item}</li>
               ))}
             </ul>
@@ -207,7 +270,7 @@ export default function ReviewView({ trades, selectedTrade, onSelect, onUpdate, 
               <ListChecks size={16} />
               改进建议 / 下次执行清单
             </div>
-            {actionItems.map((item) => (
+            {(displayedReview.actionItems.length ? displayedReview.actionItems : ['补齐交易证据后重新分析。']).map((item) => (
               <label key={item} className="mt-2 flex items-center gap-2 text-sm text-slate-300">
                 <input type="checkbox" className="h-4 w-4 accent-cyan-400" defaultChecked={item.includes('进行中')} />
                 {item}

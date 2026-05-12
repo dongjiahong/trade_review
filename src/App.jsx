@@ -326,6 +326,7 @@ function App() {
               onUpdate={updateTrade}
               stats={stats}
               models={models}
+              aiConfig={aiConfig}
             />
           )}
           {activeView === 'settings' && (
